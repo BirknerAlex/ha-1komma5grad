@@ -1,6 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import UTC, datetime, timedelta, timezone
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import UnitOfEnergy
@@ -112,7 +111,7 @@ class ElectricityPriceSensor(CoordinatorEntity[Coordinator], SensorEntity):
             price_value = price_data.get("marketPriceWithGridCostAndVat")
             if price_value is not None:
                 # Convert CET to real UTC for the forecast output
-                ts_utc = ts_cet.astimezone(ZoneInfo("UTC"))
+                ts_utc = ts_cet.astimezone(UTC)
                 forecast.append({
                     "datetime": ts_utc.isoformat(),
                     "price": round(float(price_value), 4),

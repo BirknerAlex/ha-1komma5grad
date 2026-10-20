@@ -1,7 +1,8 @@
 {
     "config": {
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "Device is already configured",
+            "reauth_successful": "Re-authentication was successful"
         },
         "error": {
             "cannot_connect": "Failed to connect",
@@ -14,6 +15,13 @@
                     "password": "Password",
                     "username": "Username",
                     "scan_interval": "Scrape Interval (seconds)"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Reauthenticate 1KOMMA5GRAD",
+                "description": "The password for {username} was rejected. Enter the new password.",
+                "data": {
+                    "password": "Password"
                 }
             }
         }

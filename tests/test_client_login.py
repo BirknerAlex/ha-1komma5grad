@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import jwt
+import pytest
 
 from custom_components.einskomma5grad.api.client import (
     AUTH0_CLIENT,
@@ -10,6 +11,7 @@ from custom_components.einskomma5grad.api.client import (
     BROWSER_USER_AGENT,
     Client,
 )
+from custom_components.einskomma5grad.api.error import InvalidCredentialsError
 
 LOGIN_URL = "https://auth.1komma5grad.com/u/login?state=login-state&ui_locales=de"
 
@@ -105,3 +107,23 @@ def test_login_looks_like_the_app() -> None:
     assert post.call_args.kwargs["json"]["code"] == "the-code"
     assert post.call_args.kwargs["headers"] == AUTH0_SDK_HEADERS
     assert client.token_set == {"access_token": token.json()["access_token"], "refresh_token": "r"}
+
+
+def test_rejected_credentials_are_not_retried() -> None:
+    """A rejected password must be tried once, not three times per poll."""
+    client = Client("me@example.com", "wrong")
+
+    def session_request(self, method, url, **kwargs):
+        if url.endswith("/authorize"):
+            return _response(200, '<input name="state" value="login-state">', url=LOGIN_URL)
+        return _response(400, "wrong-credentials")
+
+    with (
+        patch("requests.Session.request", side_effect=session_request, autospec=True) as request,
+        patch("time.sleep") as sleep,
+        pytest.raises(InvalidCredentialsError),
+    ):
+        client.get_token()
+
+    assert request.call_count == 2  # authorize + one login POST
+    sleep.assert_not_called()

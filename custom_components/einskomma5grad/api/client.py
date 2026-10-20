@@ -16,7 +16,7 @@ import requests
 from jwt import PyJWKClient
 
 from .anonymize import describe_body, describe_payload, mask_text, url_template
-from .error import AuthenticationError, RequestError
+from .error import AuthenticationError, InvalidCredentialsError, RequestError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -246,6 +246,9 @@ class Client:
         for attempt in range(3):
             try:
                 return self.login()
+            except InvalidCredentialsError:
+                # Retrying with a rejected password risks locking the account.
+                raise
             except AuthenticationError as err:
                 last_error = err
                 delay = 2 ** (attempt + 1)  # 2s, 4s, 8s
@@ -314,6 +317,8 @@ class Client:
                 timeout=REQUEST_TIMEOUT,
             )
 
+            if login_post_res.status_code in (400, 401, 403):
+                raise InvalidCredentialsError("Failed to login: " + login_post_res.text)
             if login_post_res.status_code != 302:
                 raise AuthenticationError("Failed to login: " + login_post_res.text)
 

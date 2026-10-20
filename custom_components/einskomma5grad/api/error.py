@@ -11,6 +11,13 @@ class AuthenticationError(ApiError):
         super().__init__(self.message)
 
 
+class InvalidCredentialsError(AuthenticationError):
+    """Raised when the login rejects the stored username or password"""
+
+    def __init__(self, message="Invalid credentials"):
+        super().__init__(message)
+
+
 class RequestError(ApiError):
     """Raised when there is an error making a request"""
 
