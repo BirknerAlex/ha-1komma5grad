@@ -12,5 +12,5 @@
   "requirements": [
     "sentry-sdk"
   ],
-  "version": "1.6.2"
+  "version": "1.6.3-dev.1"
 }
