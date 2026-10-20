@@ -11,11 +11,12 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .api.client import Client
-from .api.error import ApiError
+from .api.error import ApiError, InvalidCredentialsError
 from .api.ev_charger import ChargingMode
 from .api.system import System
 from .api.systems import Systems
@@ -162,6 +163,8 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
         """
         try:
             return await self.hass.async_add_executor_job(func, *args)
+        except InvalidCredentialsError:
+            raise
         except ApiError:
             if fallback == "previous":
                 _LOGGER.warning(
@@ -217,6 +220,8 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
         for key, (func, args) in calls.items():
             try:
                 result[key] = await self.hass.async_add_executor_job(func, *args)
+            except InvalidCredentialsError:
+                raise
             except ApiError:
                 _LOGGER.debug("Failed to get %s for system %s, keeping previous", key, sid)
                 result[key] = previous.get(key)
@@ -321,6 +326,10 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
                 energy_today=energy_today,
                 insights=insights,
             )
+        except InvalidCredentialsError as err:
+            raise ConfigEntryAuthFailed(
+                "1KOMMA5GRAD rejected the stored credentials"
+            ) from err
         except ApiError as err:
             if self.error_reporter:
                 self.error_reporter.capture_api_issue(
