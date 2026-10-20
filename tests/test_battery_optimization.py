@@ -20,6 +20,9 @@ from tests.conftest import SYSTEM_SLUG, load_mock
 
 BINARY_SENSOR = f"binary_sensor.battery_no_discharge_active_{SYSTEM_SLUG}"
 FETCH = "custom_components.einskomma5grad.coordinator.fetch_optimizations"
+TRACK_TIME = (
+    "custom_components.einskomma5grad.binary_sensor.async_track_point_in_utc_time"
+)
 
 SLOT = timedelta(minutes=15)
 BASE = datetime.datetime(2026, 10, 20, 20, 0, tzinfo=datetime.UTC)
@@ -229,6 +232,26 @@ async def test_sensor_reflects_merged_hold_window(
             "market_price": 0.04,
         }
     ]
+
+
+async def test_updates_are_scheduled_at_slot_boundaries_inside_merged_window(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    """The price changes per slot, so each slot boundary needs an update."""
+    now = dt_util.utcnow()
+    current = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 15)
+    events = [
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current, price=36.94),
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current + SLOT, price=30.0),
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current + 2 * SLOT, price=32.0),
+    ]
+    with patch(TRACK_TIME) as track:
+        await _setup(hass, mock_config_entry, mock_api, events)
+
+    assert track.call_args_list
+    # The merged window ends at current + 3 slots, but the next update is due
+    # when the next slot starts.
+    assert {call.args[2] for call in track.call_args_list} == {current + SLOT}
 
 
 async def test_sensor_off_without_active_battery_window(

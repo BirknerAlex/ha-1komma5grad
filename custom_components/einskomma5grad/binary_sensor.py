@@ -6,6 +6,8 @@ such a load is covered from the grid instead of the battery.
 """
 
 import datetime
+from collections.abc import Coroutine
+from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -58,7 +60,9 @@ class BatteryNoDischargeBinarySensor(
         super().__init__(coordinator)
         self._system_id = system_id
         self._unsub_boundary: CALLBACK_TYPE | None = None
-        self._boundary_job = HassJob(
+        self._boundary_job: HassJob[
+            [datetime.datetime], Coroutine[Any, Any, None] | None
+        ] = HassJob(
             self._handle_boundary, "battery window boundary", cancel_on_shutdown=True
         )
 
@@ -135,12 +139,16 @@ class BatteryNoDischargeBinarySensor(
 
     @callback
     def _schedule_boundary_update(self) -> None:
-        """Update the state when the next window starts or ends."""
+        """Update the state when the next slot starts or ends.
+
+        Uses the raw slots, not the merged windows: `market_price` follows the
+        current slot, so it changes at slot boundaries inside a merged window.
+        """
         self._cancel_boundary_update()
         now = dt_util.utcnow()
         boundaries = [
             moment
-            for window in merge_windows(self._windows() or [])
+            for window in self._windows() or []
             if window.asset == ASSET_BATTERY
             for moment in (window.start, window.end)
             if moment > now
