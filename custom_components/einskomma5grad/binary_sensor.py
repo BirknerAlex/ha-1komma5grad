@@ -21,6 +21,7 @@ from .api.optimizations import (
     OptimizationWindow,
     active_window,
     battery_hold_active,
+    merge_windows,
     upcoming_windows,
 )
 from .const import DOMAIN, DeviceType
@@ -94,15 +95,22 @@ class BatteryNoDischargeBinarySensor(
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Current decision and the planned windows, adjacent slots merged.
+
+        `market_price` (EUR/kWh) is the price of the current 15-minute slot, the
+        prices in `upcoming` are averages over each merged window.
+        """
         now = dt_util.utcnow()
-        windows = self._windows() or []
-        window = active_window(windows, now)
-        upcoming = upcoming_windows(windows, now)
+        slots = self._windows() or []
+        merged = merge_windows(slots)
+        slot = active_window(slots, now)
+        window = active_window(merged, now)
+        upcoming = upcoming_windows(merged, now)
         return {
             "decision": window.decision if window else None,
             "window_start": window.start.isoformat() if window else None,
             "window_end": window.end.isoformat() if window else None,
-            "market_price": window.market_price if window else None,
+            "market_price": slot.market_price if slot else None,
             "upcoming": [w.as_dict() for w in upcoming[:MAX_UPCOMING_WINDOWS]],
         }
 
@@ -132,7 +140,7 @@ class BatteryNoDischargeBinarySensor(
         now = dt_util.utcnow()
         boundaries = [
             moment
-            for window in self._windows() or []
+            for window in merge_windows(self._windows() or [])
             if window.asset == ASSET_BATTERY
             for moment in (window.start, window.end)
             if moment > now

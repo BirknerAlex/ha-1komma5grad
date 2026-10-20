@@ -1,13 +1,17 @@
 """Heartbeat AI optimization windows (planned battery and heat pump decisions).
 
-Parsed from `GET /api/v1/heartbeat-ai/optimizations`. Each event describes a time
-window and what Heartbeat decided for one asset in it, e.g. that the battery must
-not discharge or is charged from the grid. Kept free of Home Assistant imports so
-it can be tested on its own.
+Parsed from `GET /api/v1/heartbeat-ai/optimizations`. Each event describes a
+15-minute slot and what Heartbeat decided for one asset in it, e.g. that the
+battery must not discharge or is charged from the grid. Kept free of Home
+Assistant imports so it can be tested on its own.
+
+Observed behaviour of the endpoint: the plan only reaches a few hours ahead,
+events whose `from` is earlier than `to - 48h` are dropped, and a `to` much
+further than two days ahead returns nothing.
 """
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,10 +25,13 @@ ASSET_BATTERY = "BATTERY"
 # (e.g. a wallbox Heartbeat does not control) is covered from the grid.
 BATTERY_HOLD_DECISIONS = frozenset({"BATTERY_NO_DISCHARGE", "BATTERY_CHARGE_FROM_GRID"})
 
+# The API sends `marketPrice.value` in EUR/MWh; the integration uses EUR/kWh.
+MWH_PER_KWH = 1000
+
 
 @dataclass(frozen=True)
 class OptimizationWindow:
-    """One planned decision for one asset."""
+    """One planned decision for one asset; market price in EUR/kWh."""
 
     asset: str
     decision: str
@@ -56,8 +63,14 @@ def _parse_time(value) -> datetime.datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=datetime.UTC)
 
 
+def _to_eur_per_kwh(value) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return round(value / MWH_PER_KWH, 5)
+
+
 def parse_windows(response) -> list[OptimizationWindow]:
-    """Return all well-formed windows, sorted by start. Malformed events are skipped."""
+    """Return all well-formed slots, sorted by start. Malformed events are skipped."""
     events = response.get("events") if isinstance(response, dict) else None
     windows: list[OptimizationWindow] = []
     for event in events or []:
@@ -73,7 +86,6 @@ def parse_windows(response) -> list[OptimizationWindow]:
         if not isinstance(asset, str) or not isinstance(decision, str):
             continue
         price = data.get("marketPrice")
-        price_value = price.get("value") if isinstance(price, dict) else None
         soc = data.get("stateOfCharge")
         windows.append(
             OptimizationWindow(
@@ -81,14 +93,44 @@ def parse_windows(response) -> list[OptimizationWindow]:
                 decision=decision,
                 start=start,
                 end=end,
-                market_price=float(price_value)
-                if isinstance(price_value, (int, float))
-                else None,
+                market_price=_to_eur_per_kwh(
+                    price.get("value") if isinstance(price, dict) else None
+                ),
                 state_of_charge=soc if isinstance(soc, int) else None,
             )
         )
     windows.sort(key=lambda w: w.start)
     return windows
+
+
+def merge_windows(windows: list[OptimizationWindow]) -> list[OptimizationWindow]:
+    """Join adjacent or overlapping slots with the same asset and decision.
+
+    The merged window carries the average market price of its slots and the state
+    of charge of its first slot.
+    """
+    merged: list[OptimizationWindow] = []
+    prices: list[list[float]] = []
+    for window in sorted(windows, key=lambda w: (w.asset, w.start)):
+        last = merged[-1] if merged else None
+        if (
+            last is not None
+            and last.asset == window.asset
+            and last.decision == window.decision
+            and window.start <= last.end
+        ):
+            merged[-1] = replace(last, end=max(last.end, window.end))
+        else:
+            merged.append(window)
+            prices.append([])
+        if window.market_price is not None:
+            prices[-1].append(window.market_price)
+    result = [
+        replace(w, market_price=round(sum(p) / len(p), 5) if p else None)
+        for w, p in zip(merged, prices, strict=True)
+    ]
+    result.sort(key=lambda w: w.start)
+    return result
 
 
 def active_window(
