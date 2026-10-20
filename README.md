@@ -84,7 +84,14 @@ Energy sensors (kWh) are also created for grid in/out, solar production, EV char
 
 | Entity | Description |
 |--------|-------------|
-| EV Current State of Charge | Current EV battery charge level (0-100%). Can be set manually. |
+| EV Current State of Charge | Current EV battery charge level (0-100%). Can be set manually while the EV is in SMART_CHARGE mode. |
+| EV Target State of Charge | Charge level (0-100%) the EV should reach by its departure time |
+
+### Time
+
+| Entity | Description |
+|--------|-------------|
+| EV Departure Time | Time by which the EV should have reached its target state of charge |
 
 ## Electricity Price Forecast
 

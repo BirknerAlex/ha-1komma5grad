@@ -79,3 +79,40 @@ def test_reads_flat_v2_fields():
     assert charger.name() == "Tesla"
     assert charger.assigned_charger_id() == "c1"
     assert charger.charging_mode() == ChargingMode.SMART_CHARGE
+
+
+def test_schedule_settings_sent_like_the_app():
+    """Target SoC and departure time go out with the other schedule settings."""
+    charger = _charger()
+    charger._data.update(
+        {"departureTime": "08:00", "targetSoc": 0.59, "defaultSoc": 0.2}
+    )
+    assert charger.target_soc() == 59.0
+    assert charger.departure_time() == "08:00"
+
+    charger.set_target_soc(80)
+    assert _patch_mock(charger).call_args.kwargs["json"] == {
+        "id": "ev1",
+        "connectionStatus": None,
+        "departureTime": "08:00",
+        "targetSoc": 0.8,
+        "defaultSoc": 0.2,
+        "chargingMode": "SMART_CHARGE",
+        "type": "EV",
+    }
+    assert charger.target_soc() == 80.0
+
+    charger.set_departure_time("06:30")
+    body = _patch_mock(charger).call_args.kwargs["json"]
+    assert body["departureTime"] == "06:30"
+    assert body["targetSoc"] == 0.8
+    assert body["chargingMode"] == "SMART_CHARGE"
+    assert charger.departure_time() == "06:30"
+
+
+def test_target_soc_missing_from_api():
+    """An EV without schedule settings reports no target SoC or departure time."""
+    charger = _charger()
+
+    assert charger.target_soc() is None
+    assert charger.departure_time() is None

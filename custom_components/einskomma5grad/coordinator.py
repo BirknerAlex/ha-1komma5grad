@@ -40,6 +40,8 @@ class EVData:
     charging_mode: str | None
     system_id: str | None
     assigned_charger_id: str | None = None
+    target_soc: float | None = None
+    departure_time: str | None = None
 
 @dataclass
 class AssetInfo:
@@ -299,6 +301,8 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
                         charging_mode=ev_charger.charging_mode().value,
                         system_id=sid,
                         assigned_charger_id=ev_charger.assigned_charger_id(),
+                        target_soc=ev_charger.target_soc(),
+                        departure_time=ev_charger.departure_time(),
                     )
 
                 # Fetch device info (gateway + assets) — purely optional
@@ -377,6 +381,30 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
         for charger in system.get_ev_chargers():
             if charger.id() == ev_id:
                 charger.set_current_soc(soc)
+                return
+
+        _LOGGER.error("EV with id %s not found in system %s", ev_id, system_id)
+
+    def set_ev_target_soc(self, system_id: str, ev_id: str, soc: float):
+        """Set the state of charge an EV should reach by its departure time."""
+        systems = Systems(self.api)
+        system = systems.get_system(system_id)
+
+        for charger in system.get_ev_chargers():
+            if charger.id() == ev_id:
+                charger.set_target_soc(soc)
+                return
+
+        _LOGGER.error("EV with id %s not found in system %s", ev_id, system_id)
+
+    def set_ev_departure_time(self, system_id: str, ev_id: str, departure_time: str):
+        """Set the departure time (HH:MM) for an EV."""
+        systems = Systems(self.api)
+        system = systems.get_system(system_id)
+
+        for charger in system.get_ev_chargers():
+            if charger.id() == ev_id:
+                charger.set_departure_time(departure_time)
                 return
 
         _LOGGER.error("EV with id %s not found in system %s", ev_id, system_id)

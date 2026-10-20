@@ -34,16 +34,14 @@ def _build_asset_device_info(
     identifier = asset.serial_number or asset.asset_id
     if not identifier:
         return None
-    info = DeviceInfo(
+    # The link to the gateway is set once in async_setup_entry.
+    return DeviceInfo(
         identifiers={(DOMAIN, identifier)},
         name=asset.model or asset.name or fallback_name,
         manufacturer=asset.manufacturer,
         model=asset.model,
         serial_number=asset.serial_number,
     )
-    if device_data.gateway:
-        info["via_device"] = (DOMAIN, device_data.gateway.serial_number)
-    return info
 
 
 def _asset_device_info(

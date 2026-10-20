@@ -13,7 +13,7 @@ from .coordinator import Coordinator
 from .device_info import all_device_infos
 from .error_reporting import ErrorReporter
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.SWITCH, Platform.NUMBER]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.SWITCH, Platform.NUMBER, Platform.TIME]
 
 
 @dataclass
@@ -60,10 +60,21 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
         device_registry = dr.async_get(hass)
         for device_data in (coordinator.data.device_data or {}).values():
-            for info in all_device_infos(device_data):
+            devices = [
                 device_registry.async_get_or_create(
                     config_entry_id=config_entry.entry_id, **info
                 )
+                for info in all_device_infos(device_data)
+            ]
+            # The gateway comes first; link the assets to it by device id
+            # (the `via_device` identifier is deprecated).
+            if device_data.gateway:
+                for device in devices[1:]:
+                    # An asset sharing the gateway's serial resolves to the gateway
+                    if device.id != devices[0].id:
+                        device_registry.async_update_device(
+                            device.id, via_device_id=devices[0].id
+                        )
 
         # Setup platforms (based on the list of entity types in PLATFORMS defined above)
         # This calls the async_setup method in each of your entity type files.

@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import Coordinator
 from .ev_current_soc import EVCurrentStateOfCharge
+from .ev_target_soc import EVTargetStateOfCharge
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ async def async_setup_entry(
             _LOGGER.warning("Skipping EV %s with no system_id", ev_id)
             continue
         entities.append(EVCurrentStateOfCharge(coordinator, ev.system_id, ev_id))
+        entities.append(EVTargetStateOfCharge(coordinator, ev.system_id, ev_id))
 
     async_add_entities(entities)
 

@@ -67,18 +67,38 @@ class EVCharger:
         if self.charging_mode() == mode:
             return
 
-        # Mirrors the app, which sends the schedule settings along with the mode.
+        self._patch_schedule({"chargingMode": mode.value}, "charging mode")
+
+    def _patch_schedule(self, fields: dict, what: str) -> None:
+        """PATCH a schedule setting; the app always sends all of them together."""
         self._patch(
             {
                 "departureTime": self._data.get("departureTime"),
                 "targetSoc": self._data.get("targetSoc"),
                 "defaultSoc": self._data.get("defaultSoc"),
-                "chargingMode": mode.value,
+                "chargingMode": self._data["chargingMode"],
+                **fields,
             },
-            "charging mode",
+            what,
         )
 
-        self._data["chargingMode"] = mode.value
+        self._data.update(fields)
+
+    def target_soc(self) -> float | None:
+        target_soc = self._data.get("targetSoc")
+        if target_soc is None:
+            return None
+
+        return round(target_soc * 100.0, 2)
+
+    def set_target_soc(self, soc: float) -> None:
+        self._patch_schedule({"targetSoc": float(soc / 100.0)}, "target state of charge")
+
+    def departure_time(self) -> str | None:
+        return self._data.get("departureTime")
+
+    def set_departure_time(self, departure_time: str) -> None:
+        self._patch_schedule({"departureTime": departure_time}, "departure time")
 
     def current_soc(self) -> float | None:
         if self.charging_mode() != ChargingMode.SMART_CHARGE:
