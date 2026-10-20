@@ -1,3 +1,15 @@
+## [1.8.0](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.7.1...v1.8.0) (2026-10-20)
+
+### 🚀 Features
+
+* add battery and heat pump decision sensors and plan calendars, document them ([a5be6e2](https://github.com/BirknerAlex/ha-1komma5grad/commit/a5be6e284ca59b6daa4cfa46415ad6d4824268fe))
+* expose Heartbeat AI battery decisions as binary sensor ([d9a637d](https://github.com/BirknerAlex/ha-1komma5grad/commit/d9a637d56769027f980a477f00ddb2b6098488ec))
+
+### 🛠️ Fixes
+
+* read the electricity price of the current 15 minute slot ([b1a29bb](https://github.com/BirknerAlex/ha-1komma5grad/commit/b1a29bb29debc410dfa6b6820a11bf2aaec2c70e))
+* report market price in EUR/kWh and merge adjacent slots ([2b9178d](https://github.com/BirknerAlex/ha-1komma5grad/commit/2b9178d49607c7cee6331d8da65b0824971b82fb))
+
 ## [1.8.0-dev.3](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.8.0-dev.2...v1.8.0-dev.3) (2026-10-20)
 
 ### 🚀 Features
