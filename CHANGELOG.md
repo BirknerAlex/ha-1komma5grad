@@ -1,3 +1,13 @@
+## [1.7.0](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.6.2...v1.7.0) (2026-10-20)
+
+### 🚀 Features
+
+* set target SoC and departure time for smart charge ([2cf4c8d](https://github.com/BirknerAlex/ha-1komma5grad/commit/2cf4c8dfddb12a624a218ecc636056b4d881c6cb))
+
+### 🛠️ Fixes
+
+* use datetime.UTC alias to satisfy ruff UP017 ([1c03ae6](https://github.com/BirknerAlex/ha-1komma5grad/commit/1c03ae61ad2a3e27972f30bb288fa6d4843e5253))
+
 ## [1.7.0-dev.1](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.6.3-dev.1...v1.7.0-dev.1) (2026-10-20)
 
 ### 🚀 Features
