@@ -90,9 +90,12 @@ def mock_api():
         ),
         "status_and_assets": load_mock("GET_sites_id_status-and-assets.json"),
         "energy_today": load_mock("GET_systems_id_energy-historical.json"),
+        "optimizations": load_mock("GET_heartbeat-ai_optimizations.json"),
     }
 
     def get_router(url, **kwargs):
+        if "heartbeat-ai/optimizations" in url:
+            return _make_response(mock_data["optimizations"])
         if "/api/v1/systems/" in url and url.endswith("/details"):
             return _make_response(cast(dict, mock_data["systems"])["data"][0])
         if re.search(r"/api/v4/systems/[^/]+$", url):

@@ -18,12 +18,20 @@ from homeassistant.util import dt as dt_util
 from .api.client import Client
 from .api.error import ApiError, InvalidCredentialsError
 from .api.ev_charger import ChargingMode
+from .api.optimizations import (
+    OptimizationWindow,
+    fetch_optimizations,
+    parse_windows,
+)
 from .api.system import System
 from .api.systems import Systems
 from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     INSIGHTS_REFRESH_INTERVAL,
+    OPTIMIZATION_LOOKAHEAD,
+    OPTIMIZATION_LOOKBEHIND,
+    OPTIMIZATION_REFRESH_INTERVAL,
     PRICE_REFRESH_INTERVAL,
     SAVINGS_WINDOW_DAYS,
 )
@@ -92,6 +100,9 @@ class SystemsData:
     # energy_trader and energy_trader_monthly (each None when unavailable).
     insights: dict[str, dict[str, dict | None]] | None = None
 
+    # Per system: planned Heartbeat AI decisions, None until fetched successfully.
+    optimizations: dict[str, list[OptimizationWindow] | None] | None = None
+
 def _still_fresh(
     last: datetime.datetime | None, now: datetime.datetime, interval: timedelta
 ) -> bool:
@@ -129,6 +140,7 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
         # than the rest of the data.
         self._prices_fetched_at: dict[str, datetime.datetime] = {}
         self._insights_fetched_at: dict[str, datetime.datetime] = {}
+        self._optimizations_fetched_at: dict[str, datetime.datetime] = {}
 
         # Set by async_setup_entry when the user opted in to error reporting.
         # Home Assistant logs UpdateFailed itself, so it is reported explicitly.
@@ -227,6 +239,39 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
                 result[key] = previous.get(key)
         return result
 
+    async def _fetch_optimizations(
+        self, system: System, sid: str
+    ) -> list[OptimizationWindow] | None:
+        """Fetch the planned Heartbeat AI decisions every OPTIMIZATION_REFRESH_INTERVAL.
+
+        On failure the previous windows are kept; entities evaluate them against
+        the current time, so they stay correct until the plan changes.
+        """
+        previous = self._previous_value("optimizations", sid)
+        now = dt_util.utcnow()
+        last = self._optimizations_fetched_at.get(sid)
+        # Also wait after a failed attempt: systems without a battery may not
+        # support the endpoint at all and should not query it on every poll.
+        if last is not None and now - last < OPTIMIZATION_REFRESH_INTERVAL:
+            return previous
+
+        self._optimizations_fetched_at[sid] = now
+        response = await self._fetch_field(
+            "Heartbeat AI optimizations", "optimizations", sid,
+            fetch_optimizations, system,
+            now - OPTIMIZATION_LOOKBEHIND, now + OPTIMIZATION_LOOKAHEAD,
+            fallback="none",
+        )
+        if response is None:
+            return previous
+        return parse_windows(response)
+
+    def get_optimizations_by_id(self, system_id: str) -> list[OptimizationWindow] | None:
+        """Return the planned Heartbeat AI decisions by system id."""
+        if self.data.optimizations is None:
+            return None
+        return self.data.optimizations.get(system_id)
+
     def get_insights_by_id(self, system_id: str) -> dict[str, dict | None]:
         """Return the price and savings figures by system id."""
         if self.data.insights is None:
@@ -274,11 +319,13 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
             device_data = {}
             energy_today = {}
             insights = {}
+            optimizations = {}
             for system in systems:
                 sid = system.id()
 
                 prices[sid] = await self._fetch_prices(system, sid, start, end)
                 insights[sid] = await self._fetch_insights(system, sid)
+                optimizations[sid] = await self._fetch_optimizations(system, sid)
                 energy_today[sid] = await self._fetch_field(
                     "historical energy", "energy_today", sid,
                     system.get_energy_historical, today, fallback="none",
@@ -325,6 +372,7 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
                 device_data=device_data,
                 energy_today=energy_today,
                 insights=insights,
+                optimizations=optimizations,
             )
         except InvalidCredentialsError as err:
             raise ConfigEntryAuthFailed(

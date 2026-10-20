@@ -13,7 +13,14 @@ from .coordinator import Coordinator
 from .device_info import all_device_infos
 from .error_reporting import ErrorReporter
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.SWITCH, Platform.NUMBER, Platform.TIME]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+    Platform.SELECT,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.TIME,
+]
 
 
 @dataclass

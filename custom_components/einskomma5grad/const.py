@@ -18,6 +18,13 @@ PRICE_REFRESH_INTERVAL = timedelta(minutes=15)
 # Savings, Heartbeat price and Energy Trader figures only move slowly
 INSIGHTS_REFRESH_INTERVAL = timedelta(hours=1)
 
+# Heartbeat AI decisions are planned day-ahead and change rarely
+OPTIMIZATION_REFRESH_INTERVAL = timedelta(minutes=15)
+
+# Range of optimization windows fetched around now
+OPTIMIZATION_LOOKBEHIND = timedelta(hours=12)
+OPTIMIZATION_LOOKAHEAD = timedelta(hours=36)
+
 # Window of the savings figure, in days
 SAVINGS_WINDOW_DAYS = 30
 
