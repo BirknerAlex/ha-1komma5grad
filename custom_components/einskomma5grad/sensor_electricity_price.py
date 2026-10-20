@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import UnitOfEnergy
@@ -12,19 +12,23 @@ from .const import CURRENCY_ICON, DOMAIN, DeviceType
 from .coordinator import Coordinator
 from .device_info import get_device_info
 
-# The 1KOMMA5° API returns timeseries keys labeled with "Z" suffix but
-# they are actually in CET (UTC+1 fixed, no DST), following the European
-# energy market convention (EPEX SPOT).
-_CET = timezone(timedelta(hours=1))
+# The timeseries keys of the price endpoint are true UTC (the "Z" is right), and
+# each key labels the END of its 15 minute slot: the price valid from 21:15 to 21:30
+# UTC is stored under "21:30Z". Hourly resolution works the same way (the key is
+# the end of the hour). Verified against the Heartbeat app and the Heartbeat AI
+# optimizations, whose slot [22:00, 22:15) carries the price of the key "22:15Z".
+SLOT = timedelta(minutes=15)
+
+
+def slot_start(now: datetime) -> datetime:
+    """Return the start (UTC) of the 15 minute slot that `now` falls into."""
+    now_utc = now.astimezone(UTC)
+    return now_utc.replace(minute=(now_utc.minute // 15) * 15, second=0, microsecond=0)
+
 
 def current_slot_key() -> str:
     """Return the timeseries key of the current 15 minute price slot."""
-    now_cet = dt_util.now().astimezone(_CET)
-    return (
-        now_cet
-        .replace(minute=(now_cet.minute // 15) * 15, second=0, microsecond=0)
-        .strftime("%Y-%m-%dT%H:%MZ")
-    )
+    return (slot_start(dt_util.now()) + SLOT).strftime("%Y-%m-%dT%H:%MZ")
 
 
 class ElectricityPriceSensor(CoordinatorEntity[Coordinator], SensorEntity):
@@ -91,29 +95,26 @@ class ElectricityPriceSensor(CoordinatorEntity[Coordinator], SensorEntity):
         if not self._prices:
             return attrs
 
-        now_cet = dt_util.now().astimezone(_CET)
-        now_cet_floored = now_cet.replace(minute=(now_cet.minute // 15) * 15, second=0, microsecond=0)
+        current_start = slot_start(dt_util.now())
 
-        # Build forecast list: future 15-min slots, sorted chronologically
-        # API keys are CET (UTC+1) despite the "Z" suffix
+        # Build forecast list: future 15-min slots, sorted chronologically.
+        # A key is the END of its slot (UTC), so the slot starts 15 minutes earlier.
         forecast = []
         for timestamp_str, price_data in sorted(self._prices.items()):
             try:
-                ts_cet = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%MZ").replace(
-                    tzinfo=_CET
-                )
+                start = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%MZ").replace(
+                    tzinfo=UTC
+                ) - SLOT
             except (ValueError, TypeError):
                 continue
 
-            if ts_cet <= now_cet_floored:
+            if start <= current_start:
                 continue
 
             price_value = price_data.get("marketPriceWithGridCostAndVat")
             if price_value is not None:
-                # Convert CET to real UTC for the forecast output
-                ts_utc = ts_cet.astimezone(UTC)
                 forecast.append({
-                    "datetime": ts_utc.isoformat(),
+                    "datetime": start.isoformat(),
                     "price": round(float(price_value), 4),
                 })
 

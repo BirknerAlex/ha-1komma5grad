@@ -12,8 +12,9 @@ from tests.conftest import SYSTEM_ID, SYSTEM_SLUG
 
 PRICE_ENTITY = f"sensor.electricity_price_{SYSTEM_SLUG}"
 
-# Frozen time for price forecast tests: 2026-03-29 08:30 UTC (= 09:30 CET)
-# The API returns timeseries keys in CET (UTC+1), so the current slot key is 09:30Z
+# Frozen time for price forecast tests: 2026-03-29 08:30 UTC.
+# The API returns timeseries keys in UTC and labels each 15 minute slot with its
+# end, so the slot 08:30-08:45 is stored under the key 08:45Z.
 FROZEN_NOW = datetime(2026, 3, 29, 8, 30, 0, tzinfo=ZoneInfo("UTC"))
 
 
@@ -207,9 +208,9 @@ def test_daily_energy_sensor_reads_measured_metric():
 
 
 # --- Electricity price forecast attribute tests ---
-# Mock timeseries keys are CET (UTC+1) despite "Z" suffix.
-# Frozen at 08:30 UTC = 09:30 CET → current CET slot = 09:30Z
-# Forecast starts at 09:45 CET (= 08:45 UTC) and outputs real UTC datetimes.
+# Mock timeseries keys are UTC and label the end of the slot.
+# Frozen at 08:30 UTC → the current slot 08:30-08:45 is the key 08:45Z.
+# The forecast starts with the slot 08:45-09:00 (key 09:00Z) and outputs the slot starts.
 
 
 async def _setup_with_frozen_time(hass, mock_config_entry, mock_api):
@@ -239,8 +240,8 @@ async def test_price_sensor_has_current_value(
     """Test that the price sensor shows the current 15-min slot's price."""
     state = await _setup_with_frozen_time(hass, mock_config_entry, mock_api)
     assert state is not None
-    # 09:30 CET entry (key "09:30Z"): marketPriceWithGridCostAndVat → rounded to 0.2031
-    assert float(state.state) == 0.2031
+    # Key "08:45Z" (the slot 08:30-08:45): marketPriceWithGridCostAndVat 0.2077383
+    assert float(state.state) == 0.2077
 
 
 async def test_price_forecast_is_list(
@@ -271,9 +272,9 @@ async def test_price_forecast_count(
 ):
     """Test forecast_hours_available matches expected count."""
     state = await _setup_with_frozen_time(hass, mock_config_entry, mock_api)
-    # 145 future 15-min slots (09:45 CET through 21:45 CET next day, output as real UTC)
-    assert state.attributes["forecast_hours_available"] == 145
-    assert len(state.attributes["forecast"]) == 145
+    # 148 future 15-min slots: the keys 09:00Z through 21:45Z the next day
+    assert state.attributes["forecast_hours_available"] == 148
+    assert len(state.attributes["forecast"]) == 148
 
 
 async def test_price_forecast_excludes_past_and_current(
@@ -282,10 +283,10 @@ async def test_price_forecast_excludes_past_and_current(
     """Test that forecast only contains future slots, not current or past."""
     state = await _setup_with_frozen_time(hass, mock_config_entry, mock_api)
     forecast = state.attributes["forecast"]
-    # First forecast: 09:45 CET = 08:45 UTC (next slot after frozen 09:30 CET)
+    # First forecast: the slot 08:45-09:00 (key 09:00Z), the next slot after 08:30
     assert forecast[0]["datetime"] == "2026-03-29T08:45:00+00:00"
-    # Last entry: 21:45 CET next day = 20:45 UTC
-    assert forecast[-1]["datetime"] == "2026-03-30T20:45:00+00:00"
+    # Last entry: the slot 21:30-21:45 (key 21:45Z) on the next day
+    assert forecast[-1]["datetime"] == "2026-03-30T21:30:00+00:00"
 
 
 async def test_price_forecast_sorted_chronologically(
@@ -324,7 +325,7 @@ async def test_price_cheapest_upcoming_hour(
     attrs = state.attributes
     assert "cheapest_upcoming_hour" in attrs
     assert "cheapest_upcoming_price" in attrs
-    # 13:00 CET = 12:00 UTC hour has the lowest average price across 4 slots
+    # The hour starting 12:00 UTC (slots 12:00-13:00) has the lowest average price
     assert attrs["cheapest_upcoming_hour"] == "2026-03-29T12:00:00+00:00"
     assert attrs["cheapest_upcoming_price"] == 0.1496
 
