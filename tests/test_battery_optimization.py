@@ -2,6 +2,7 @@
 
 import datetime
 from datetime import timedelta
+from typing import cast
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
@@ -11,6 +12,7 @@ from custom_components.einskomma5grad.api.error import RequestError
 from custom_components.einskomma5grad.api.optimizations import (
     active_window,
     battery_hold_active,
+    decision_label,
     merge_windows,
     parse_windows,
     upcoming_windows,
@@ -19,9 +21,13 @@ from custom_components.einskomma5grad.const import DOMAIN
 from tests.conftest import SYSTEM_SLUG, load_mock
 
 BINARY_SENSOR = f"binary_sensor.battery_no_discharge_active_{SYSTEM_SLUG}"
+DECISION_SENSOR = f"sensor.battery_optimization_decision_{SYSTEM_SLUG}"
+CALENDAR = f"calendar.battery_plan_{SYSTEM_SLUG}"
+HEAT_PUMP_SENSOR = f"sensor.heat_pump_optimization_decision_{SYSTEM_SLUG}"
+HEAT_PUMP_CALENDAR = f"calendar.heat_pump_plan_{SYSTEM_SLUG}"
 FETCH = "custom_components.einskomma5grad.coordinator.fetch_optimizations"
 TRACK_TIME = (
-    "custom_components.einskomma5grad.binary_sensor.async_track_point_in_utc_time"
+    "custom_components.einskomma5grad.plan_entity.async_track_point_in_utc_time"
 )
 
 SLOT = timedelta(minutes=15)
@@ -293,3 +299,254 @@ async def test_optimizations_fetched_once_per_interval(
         await coordinator.async_refresh()
 
     assert call.call_count == 1
+
+
+def _current_slot() -> datetime.datetime:
+    now = dt_util.utcnow()
+    return now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 15)
+
+
+def test_decision_label():
+    assert decision_label("BATTERY", "BATTERY_NO_DISCHARGE") == "Battery: no discharge"
+    assert (
+        decision_label("BATTERY", "BATTERY_CHARGE_FROM_GRID")
+        == "Battery: charge from grid"
+    )
+    assert decision_label("HEATPUMP", "HEATPUMP_AUTO") == "Heat pump: auto"
+    # Unknown decisions and assets still get a readable title
+    assert decision_label("BATTERY", "BATTERY_DISCHARGE_TO_GRID") == (
+        "Battery: discharge to grid"
+    )
+    assert decision_label("WALLBOX", "WALLBOX_PAUSE") == "Wallbox: pause"
+
+
+async def test_decision_sensor_shows_current_decision_and_plan(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    current = _current_slot()
+    events = [
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current, price=36.94),
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current + SLOT, price=30.0),
+        *_slots("BATTERY_CHARGE_FROM_GRID", current + 3 * SLOT, 2),
+        _event("HEATPUMP_AUTO", "HEATPUMP", current, price=36.94),
+    ]
+    await _setup(hass, mock_config_entry, mock_api, events)
+
+    state = hass.states.get(DECISION_SENSOR)
+    assert state is not None
+    assert state.state == "BATTERY_NO_DISCHARGE"
+    # The decision is the state, so it is not repeated as attribute.
+    assert "decision" not in state.attributes
+    assert state.attributes["window_start"] == current.isoformat()
+    assert state.attributes["window_end"] == (current + 2 * SLOT).isoformat()
+    assert state.attributes["market_price"] == 0.03694
+    assert [w["decision"] for w in state.attributes["upcoming"]] == [
+        "BATTERY_CHARGE_FROM_GRID"
+    ]
+
+
+async def test_decision_sensor_is_none_without_active_battery_window(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    current = _current_slot()
+    await _setup(
+        hass,
+        mock_config_entry,
+        mock_api,
+        [
+            _event("HEATPUMP_AUTO", "HEATPUMP", current),
+            _event("BATTERY_NO_DISCHARGE", "BATTERY", current + 4 * SLOT),
+        ],
+    )
+
+    state = hass.states.get(DECISION_SENSOR)
+    assert state is not None
+    assert state.state == "NONE"
+    assert state.attributes["window_start"] is None
+    assert len(state.attributes["upcoming"]) == 1
+
+
+async def test_decision_sensor_passes_unknown_decisions_through(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    await _setup(
+        hass,
+        mock_config_entry,
+        mock_api,
+        [_event("BATTERY_SOMETHING_NEW", "BATTERY", _current_slot())],
+    )
+
+    state = hass.states.get(DECISION_SENSOR)
+    assert state is not None
+    assert state.state == "BATTERY_SOMETHING_NEW"
+    # Not a known hold decision
+    binary = hass.states.get(BINARY_SENSOR)
+    assert binary is not None
+    assert binary.state == "off"
+
+
+async def test_new_entities_unavailable_when_endpoint_fails(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    with patch(FETCH, side_effect=RequestError("404")):
+        await _setup(hass, mock_config_entry, mock_api)
+
+    for entity_id in (DECISION_SENSOR, CALENDAR):
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "unavailable"
+
+
+async def test_calendar_current_event_and_state(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    current = _current_slot()
+    events = [
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current, price=36.94),
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current + SLOT, price=30.0),
+        _event("HEATPUMP_AUTO", "HEATPUMP", current),
+    ]
+    await _setup(hass, mock_config_entry, mock_api, events)
+
+    state = hass.states.get(CALENDAR)
+    assert state is not None
+    assert state.state == "on"
+    assert state.attributes["message"] == "Battery: no discharge"
+    assert "0.03347" in state.attributes["description"]
+    assert state.attributes["all_day"] is False
+
+
+async def test_calendar_shows_next_event_when_idle(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    current = _current_slot()
+    await _setup(
+        hass,
+        mock_config_entry,
+        mock_api,
+        [_event("BATTERY_CHARGE_FROM_GRID", "BATTERY", current + 3 * SLOT)],
+    )
+
+    state = hass.states.get(CALENDAR)
+    assert state is not None
+    assert state.state == "off"
+    assert state.attributes["message"] == "Battery: charge from grid"
+
+
+async def test_calendar_get_events_returns_merged_battery_windows(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    current = _current_slot()
+    events = [
+        *_slots("BATTERY_NO_DISCHARGE", current - 2 * SLOT, 3),
+        *_slots("BATTERY_CHARGE_FROM_GRID", current + 4 * SLOT, 2),
+        _event("HEATPUMP_AUTO", "HEATPUMP", current),
+        # Outside the requested range
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current + 30 * SLOT),
+    ]
+    await _setup(hass, mock_config_entry, mock_api, events)
+
+    result = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {
+            "entity_id": CALENDAR,
+            "start_date_time": (current - 4 * SLOT).isoformat(),
+            "end_date_time": (current + 10 * SLOT).isoformat(),
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result is not None
+    listed = cast(list[dict[str, str]], cast(dict, result[CALENDAR])["events"])
+    assert [e["summary"] for e in listed] == [
+        "Battery: no discharge",
+        "Battery: charge from grid",
+    ]
+    assert datetime.datetime.fromisoformat(listed[0]["start"]) == current - 2 * SLOT
+    assert datetime.datetime.fromisoformat(listed[0]["end"]) == current + SLOT
+    assert datetime.datetime.fromisoformat(listed[1]["end"]) == current + 6 * SLOT
+
+
+async def test_heat_pump_entities_follow_the_heat_pump_plan(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    current = _current_slot()
+    events = [
+        _event("HEATPUMP_AUTO", "HEATPUMP", current, price=36.94),
+        _event("HEATPUMP_AUTO", "HEATPUMP", current + SLOT, price=30.0),
+        _event("HEATPUMP_AUTO", "HEATPUMP", current + 4 * SLOT, price=33.0),
+        _event("BATTERY_NO_DISCHARGE", "BATTERY", current),
+    ]
+    await _setup(hass, mock_config_entry, mock_api, events)
+
+    sensor = hass.states.get(HEAT_PUMP_SENSOR)
+    assert sensor is not None
+    assert sensor.state == "HEATPUMP_AUTO"
+    assert sensor.attributes["window_start"] == current.isoformat()
+    assert sensor.attributes["window_end"] == (current + 2 * SLOT).isoformat()
+    assert sensor.attributes["market_price"] == 0.03694
+    assert [w["decision"] for w in sensor.attributes["upcoming"]] == ["HEATPUMP_AUTO"]
+
+    calendar = hass.states.get(HEAT_PUMP_CALENDAR)
+    assert calendar is not None
+    assert calendar.state == "on"
+    assert calendar.attributes["message"] == "Heat pump: auto"
+
+    # The battery entities are not affected by the heat pump windows and vice versa.
+    battery = hass.states.get(DECISION_SENSOR)
+    assert battery is not None
+    assert battery.state == "BATTERY_NO_DISCHARGE"
+    assert battery.attributes["upcoming"] == []
+
+
+async def test_heat_pump_entities_idle_between_windows(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    current = _current_slot()
+    await _setup(
+        hass,
+        mock_config_entry,
+        mock_api,
+        [_event("HEATPUMP_AUTO", "HEATPUMP", current + 4 * SLOT)],
+    )
+
+    sensor = hass.states.get(HEAT_PUMP_SENSOR)
+    assert sensor is not None
+    assert sensor.state == "NONE"
+    calendar = hass.states.get(HEAT_PUMP_CALENDAR)
+    assert calendar is not None
+    assert calendar.state == "off"
+    assert calendar.attributes["message"] == "Heat pump: auto"
+
+
+async def test_no_heat_pump_entities_without_heat_pump(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    await _setup(
+        hass,
+        mock_config_entry,
+        mock_api,
+        [_event("BATTERY_NO_DISCHARGE", "BATTERY", _current_slot())],
+    )
+
+    assert hass.states.get(DECISION_SENSOR) is not None
+    assert hass.states.get(HEAT_PUMP_SENSOR) is None
+    assert hass.states.get(HEAT_PUMP_CALENDAR) is None
+
+
+async def test_heat_pump_entities_unavailable_when_endpoint_fails(
+    hass: HomeAssistant, mock_config_entry, mock_api, enable_custom_integrations
+):
+    # The cards of the live overview alone show that there is a heat pump.
+    with patch(FETCH, side_effect=RequestError("404")), patch(
+        "custom_components.einskomma5grad.plan_entity.heat_pump_cards",
+        return_value=[{"applianceId": "pump"}],
+    ):
+        await _setup(hass, mock_config_entry, mock_api)
+
+    for entity_id in (HEAT_PUMP_SENSOR, HEAT_PUMP_CALENDAR):
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "unavailable"
