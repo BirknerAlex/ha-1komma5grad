@@ -11,6 +11,8 @@ This integration is not related to 1KOMMA5GRAD and not officially supported by t
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=BirknerAlex&repository=ha-1komma5grad&category=integration)
 
+Requires Home Assistant 2024.11 or newer.
+
 ## Limited availability
 
 This integration is for the latest 1KOMMA5GRAD Heartbeat API.
@@ -35,6 +37,17 @@ This checks if the latest iOS App is available in your region, which also uses t
 If you are still using https://my.1komma5.io/ for login (or the old app), you are still using the old API and please use this
 https://github.com/derlangemarkus/1komma5grad_ha to integrate 1KOMMA5GRAD into Home Assistant instead.
 
+## Configuration
+
+During setup you enter the e-mail address and password of your **1KOMMA5° Heartbeat** account. Under
+*Settings → Devices & services → 1KOMMA5GRAD → Configure* you can change:
+
+- **Scrape interval**: how often the live data is refreshed, 60 seconds by default (10 to 3600). Prices, savings
+  and the Heartbeat AI plan are refreshed less often, see the entities below.
+- **Send diagnostics**: see [Diagnostics](#diagnostics-optional).
+
+If the password is rejected (e.g. after you changed it), Home Assistant asks you to re-authenticate the integration.
+
 ## Entities
 
 The integration creates the following entities per system:
@@ -54,6 +67,8 @@ The integration creates the following entities per system:
 | Battery State of Charge | Battery charge level (%) |
 | Battery In Power | Power flowing into the battery (W) |
 | Battery Out Power | Power flowing out of the battery (W) |
+| Battery Optimization Decision | Battery decision Heartbeat AI currently has planned, e.g. `BATTERY_NO_DISCHARGE`, or `NONE`. Window, price and upcoming windows as attributes. See [Battery decisions](#battery-decisions-of-heartbeat-ai) |
+| Heat Pump Optimization Decision | Decision Heartbeat AI currently has planned for the heat pump, e.g. `HEATPUMP_AUTO`, or `NONE`. Only created if the system has a heat pump. See [Heat pump decisions](#heat-pump-decisions) |
 | Spot Price | Current spot price (EUR/kWh, incl. VAT, without grid costs). `price_without_vat` attribute |
 | Grid Costs | Current grid costs (EUR/kWh, incl. VAT). `price_without_vat` attribute |
 | Grid Supply Cost Today | Cost of the energy drawn from the grid today (EUR, incl. grid costs and VAT). Other variants as attributes |
@@ -67,6 +82,24 @@ The integration creates the following entities per system:
 The last five sensors are refreshed once per hour; they stay unknown if your contract does not include the feature (e.g. Energy Trader).
 
 Energy sensors (kWh) are also created for grid in/out, solar production, EV chargers, heat pumps, and battery in/out to enable the HA Energy Dashboard.
+They integrate the power readings over time. For each of them a second `... Energy ... Today` sensor reads the daily total
+measured by 1KOMMA5GRAD, which matches the dashboard of the app and resets at midnight. These daily sensors are disabled by default.
+
+If your system has more than one EV charger or more than one heat pump, a power sensor is created for each of them
+(`EV Charger <name> Power`, `Heat Pump <name> Power`) in addition to the aggregated one.
+
+### Binary sensors
+
+| Entity | Description |
+|--------|-------------|
+| Battery No Discharge Active | On while Heartbeat AI keeps the battery from discharging (`BATTERY_NO_DISCHARGE`) or charges it from the grid (`BATTERY_CHARGE_FROM_GRID`). See [Battery decisions](#battery-decisions-of-heartbeat-ai) |
+
+### Calendar
+
+| Entity | Description |
+|--------|-------------|
+| Battery Plan | The battery windows planned by Heartbeat AI as calendar events. See [Battery decisions](#battery-decisions-of-heartbeat-ai) |
+| Heat Pump Plan | The heat pump windows planned by Heartbeat AI as calendar events. Only created if the system has a heat pump. See [Heat pump decisions](#heat-pump-decisions) |
 
 ### Switches
 
@@ -93,9 +126,71 @@ Energy sensors (kWh) are also created for grid in/out, solar production, EV char
 |--------|-------------|
 | EV Departure Time | Time by which the EV should have reached its target state of charge |
 
+## Battery decisions of Heartbeat AI
+
+Heartbeat AI plans when the home battery is held back or charged from the grid. Three entities expose this plan:
+
+| Entity | Use it for |
+|--------|------------|
+| `binary_sensor.battery_no_discharge_active_YOUR_SYSTEM_ID` | **On** while the battery is held back (`BATTERY_NO_DISCHARGE`) or charged from the grid (`BATTERY_CHARGE_FROM_GRID`). The simplest trigger for automations |
+| `sensor.battery_optimization_decision_YOUR_SYSTEM_ID` | The current decision as state, as sent by the API (so decisions this integration does not know yet show up as they are), `NONE` if nothing is planned for the battery |
+| `calendar.battery_plan_YOUR_SYSTEM_ID` | The planned windows as events (e.g. for the calendar card or a trigger "when the next window begins"). The calendar is **on** while any battery window is active |
+
+This is useful for loads that Heartbeat does not control, e.g. a third-party wallbox: they are covered from the home battery as regular
+household load, unless you only start them while Heartbeat holds the battery anyway, so they are supplied from the grid at the cheap price.
+
+The plan is read every 15 minutes and the states switch exactly when a 15 minute slot starts or ends. The entities are
+unavailable until the plan could be fetched once.
+
+### Available attributes
+
+The binary sensor has all of these, the decision sensor everything except `decision` (that is its state).
+
+| Attribute | Description |
+|-----------|-------------|
+| `decision` | Current battery decision of Heartbeat AI (also decisions not known to the integration), `null` if there is none |
+| `window_start` / `window_end` | Start and end (ISO, UTC) of the current window. Adjacent 15 minute slots with the same decision are merged |
+| `market_price` | Market price of the current 15 minute slot in EUR/kWh |
+| `upcoming` | Planned battery windows as `{decision, from, to, market_price}` objects, `market_price` is the average of the window |
+
+The plan usually only reaches a few hours ahead (the calendar also shows the last 12 hours), so `upcoming` and the calendar can be short or empty.
+
+Calendar events are titled by decision (`Battery: no discharge`, `Battery: charge from grid`) and carry the decision and the average market price in
+the description.
+
+### Automation example
+
+Charge a wallbox that Heartbeat cannot control only while the battery is held back:
+
+```yaml
+alias: "Charge wallbox while Heartbeat holds the battery"
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.battery_no_discharge_active_YOUR_SYSTEM_ID
+    to:
+      - "on"
+      - "off"
+actions:
+  - action: "switch.turn_{{ trigger.to_state.state }}"
+    target:
+      entity_id: switch.my_wallbox
+```
+
+### Heat pump decisions
+
+The same plan contains the decisions for the heat pump. If your system has a heat pump, there is a second set of entities with the same
+behaviour, attributes and update times as the battery ones:
+
+| Entity | Description |
+|--------|-------------|
+| `sensor.heat_pump_optimization_decision_YOUR_SYSTEM_ID` | The current heat pump decision as sent by the API (so far only `HEATPUMP_AUTO` has been seen), `NONE` if nothing is planned. Attributes: `window_start`, `window_end`, `market_price`, `upcoming` |
+| `calendar.heat_pump_plan_YOUR_SYSTEM_ID` | The planned heat pump windows as events, titled `Heat pump: auto`. **On** while a window is active |
+
+There is no binary sensor for the heat pump, as the known decision does not hold anything back.
+
 ## Electricity Price Forecast
 
-The electricity price sensor exposes future hourly prices as extra state attributes. This allows you to build automations based on upcoming prices (e.g. run appliances during the cheapest hours).
+The electricity price sensor exposes future prices (in 15 minute steps) as extra state attributes. This allows you to build automations based on upcoming prices (e.g. run appliances during the cheapest hours).
 
 Prices for the current day are always available. Next-day prices are typically published around 14:00 CET.
 
@@ -103,13 +198,13 @@ Prices for the current day are always available. Next-day prices are typically p
 
 | Attribute | Description |
 |-----------|-------------|
-| `forecast` | List of future hourly prices as `{datetime, price}` objects |
+| `forecast` | List of future 15 minute prices as `{datetime, price}` objects (`datetime` is the start of the slot, in UTC) |
 | `price_today_min` | Lowest price of the current day |
 | `price_today_max` | Highest price of the current day |
 | `price_today_avg` | Average price of the current day |
-| `cheapest_upcoming_hour` | ISO datetime of the cheapest future hour |
-| `cheapest_upcoming_price` | Price at the cheapest future hour |
-| `forecast_hours_available` | Number of future hours available (indicates if next-day prices are published) |
+| `cheapest_upcoming_hour` | ISO datetime of the cheapest future full hour (average of its four 15 minute prices) |
+| `cheapest_upcoming_price` | Average price of the cheapest future hour |
+| `forecast_hours_available` | Number of future 15 minute prices in `forecast` (despite the name, not hours; 96 per full day, indicates if next-day prices are published) |
 
 ### Template examples
 

@@ -9,9 +9,14 @@ from .battery_power_sensor import BatteryPowerInSensor, BatteryPowerOutSensor
 from .battery_soc_sensor import BatteryStateOfChargeSensor
 from .const import DOMAIN, DeviceType
 from .coordinator import Coordinator
+from .decision_sensor import (
+    BatteryOptimizationDecisionSensor,
+    HeatPumpOptimizationDecisionSensor,
+)
 from .energy_sensor import DailyEnergySensor, EnergySensor
 from .ev_charger_power_sensor import EVChargerPowerSensor, ev_charger_cards
 from .heat_pump_power_sensor import HeatPumpPowerSensor, heat_pump_cards
+from .plan_entity import has_heat_pump
 from .sensor_electricity_price import ElectricityPriceSensor
 from .sensor_power_generic import GenericPowerSensor
 from .sensor_prices import build_price_sensors
@@ -67,6 +72,11 @@ async def async_setup_entry(
 
     for system in coordinator.data.systems:
         sensors.extend(build_price_sensors(coordinator, system.id()))
+        sensors.append(BatteryOptimizationDecisionSensor(coordinator, system.id()))
+        if has_heat_pump(coordinator, system.id()):
+            sensors.append(
+                HeatPumpOptimizationDecisionSensor(coordinator, system.id())
+            )
 
         # Grid feed out power sensor
         grid_feed_out_power_sensor = GenericPowerSensor(

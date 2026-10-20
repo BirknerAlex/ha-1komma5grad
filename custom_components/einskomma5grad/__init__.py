@@ -15,6 +15,7 @@ from .error_reporting import ErrorReporter
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
+    Platform.CALENDAR,
     Platform.SENSOR,
     Platform.SELECT,
     Platform.SWITCH,

@@ -20,10 +20,16 @@ if TYPE_CHECKING:
 OPTIMIZATIONS_PATH = "/api/v1/heartbeat-ai/optimizations"
 
 ASSET_BATTERY = "BATTERY"
+ASSET_HEAT_PUMP = "HEATPUMP"
 
 # Decisions during which the home battery is not discharged, so additional load
 # (e.g. a wallbox Heartbeat does not control) is covered from the grid.
 BATTERY_HOLD_DECISIONS = frozenset({"BATTERY_NO_DISCHARGE", "BATTERY_CHARGE_FROM_GRID"})
+
+# State of the decision sensors while Heartbeat has planned nothing for the asset.
+NO_DECISION = "NONE"
+
+_ASSET_NAMES = {ASSET_BATTERY: "Battery", ASSET_HEAT_PUMP: "Heat pump"}
 
 # The API sends `marketPrice.value` in EUR/MWh; the integration uses EUR/kWh.
 MWH_PER_KWH = 1000
@@ -50,6 +56,13 @@ class OptimizationWindow:
             "to": self.end.isoformat(),
             "market_price": self.market_price,
         }
+
+
+def decision_label(asset: str, decision: str) -> str:
+    """Readable title such as "Battery: no discharge", also for unknown decisions."""
+    name = _ASSET_NAMES.get(asset, asset.replace("_", " ").capitalize())
+    readable = decision.removeprefix(f"{asset}_").replace("_", " ").lower()
+    return f"{name}: {readable}"
 
 
 def _parse_time(value) -> datetime.datetime | None:
