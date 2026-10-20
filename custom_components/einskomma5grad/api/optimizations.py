@@ -56,7 +56,7 @@ def _parse_time(value) -> datetime.datetime | None:
     if not isinstance(value, str):
         return None
     try:
-        parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.datetime.fromisoformat(value)
     except ValueError:
         return None
     # The API sends UTC; treat a missing offset as UTC as well.

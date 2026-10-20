@@ -64,6 +64,7 @@ _INSIGHT_MOCKS = (
     ("energy-trader-savings", "GET_energy-trader-savings_id_month.json"),
     ("energy-trader", "GET_energy-trader.json"),
     ("heartbeat-prices", "GET_heartbeat-prices.json"),
+    ("heartbeat-ai/optimizations", "GET_heartbeat-ai_optimizations.json"),
     ("comparison-price", "GET_comparison-price.json"),
     ("energy-savings", "GET_systems_id_energy-savings.json"),
 )
