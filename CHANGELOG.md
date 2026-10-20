@@ -1,3 +1,9 @@
+## [1.8.0-dev.3](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.8.0-dev.2...v1.8.0-dev.3) (2026-10-20)
+
+### 🚀 Features
+
+* add battery and heat pump decision sensors and plan calendars, document them ([a5be6e2](https://github.com/BirknerAlex/ha-1komma5grad/commit/a5be6e284ca59b6daa4cfa46415ad6d4824268fe))
+
 ## [1.8.0-dev.2](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.8.0-dev.1...v1.8.0-dev.2) (2026-10-20)
 
 ### 🛠️ Fixes
