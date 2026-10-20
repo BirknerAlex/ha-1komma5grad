@@ -1,0 +1,49 @@
+{
+  "events": [
+    {
+      "id": "00000000-0000-0000-0000-000000000101",
+      "timestamp": "2026-10-20T22:00:00Z",
+      "data": {
+        "decision": "BATTERY_NO_DISCHARGE",
+        "from": "2026-10-20T23:00:00Z",
+        "to": "2026-10-21T02:00:00Z",
+        "asset": "BATTERY",
+        "marketPrice": {"value": 0.071, "currency": "EUR"},
+        "energySold": null,
+        "energyBought": null,
+        "totalCost": null,
+        "stateOfCharge": 54
+      }
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000102",
+      "timestamp": "2026-10-20T22:00:00Z",
+      "data": {
+        "decision": "BATTERY_CHARGE_FROM_GRID",
+        "from": "2026-10-21T02:00:00Z",
+        "to": "2026-10-21T03:00:00Z",
+        "asset": "BATTERY",
+        "marketPrice": {"value": 0.062, "currency": "EUR"},
+        "energySold": null,
+        "energyBought": null,
+        "totalCost": null,
+        "stateOfCharge": 54
+      }
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000103",
+      "timestamp": "2026-10-20T22:00:00Z",
+      "data": {
+        "decision": "HEATPUMP_AUTO",
+        "from": "2026-10-21T00:00:00Z",
+        "to": "2026-10-21T04:00:00Z",
+        "asset": "HEATPUMP",
+        "marketPrice": {"value": 0.065, "currency": "EUR"},
+        "energySold": null,
+        "energyBought": null,
+        "totalCost": null,
+        "stateOfCharge": 54
+      }
+    }
+  ]
+}
