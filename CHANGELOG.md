@@ -1,3 +1,9 @@
+## [1.7.1](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.7.0...v1.7.1) (2026-10-20)
+
+### 🛠️ Fixes
+
+* stop retrying rejected credentials and add reauth flow ([1705bc4](https://github.com/BirknerAlex/ha-1komma5grad/commit/1705bc475ee08597e8a694af70117d0f6833edbc))
+
 ## [1.7.1-dev.1](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.7.0...v1.7.1-dev.1) (2026-10-20)
 
 ### 🛠️ Fixes
