@@ -197,8 +197,8 @@ class System:
                 + self.id()
                 + "/charts/market-prices",
                 params={
-                    "from": start.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "to": end.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "from": start.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "to": end.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "resolution": "15m",
                 },
                 headers={

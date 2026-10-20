@@ -17,7 +17,7 @@ def main():
     systems = Systems(api_client).get_systems()
 
     for system in systems:
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         print(
             system.get_prices(
                 now,
