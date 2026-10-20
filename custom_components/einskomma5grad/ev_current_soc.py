@@ -6,6 +6,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .api.ev_charger import ChargingMode
 from .const import DOMAIN, DeviceType
 from .coordinator import Coordinator
 from .device_info import get_device_info
@@ -90,8 +91,7 @@ class EVCurrentStateOfCharge(CoordinatorEntity[Coordinator], NumberEntity):
         return self._attr_native_value
 
     async def async_set_native_value(self, value: float) -> None:
-        """Set the target SOC via the coordinator (implement setter in coordinator)."""
-        # Call coordinator setter (implement `set_target_soc` in your coordinator)
+        """Set the current SoC via the coordinator."""
         await self.hass.async_add_executor_job(
             self.coordinator.set_ev_current_soc, self._system_id, self._ev_id, value
         )
@@ -102,8 +102,12 @@ class EVCurrentStateOfCharge(CoordinatorEntity[Coordinator], NumberEntity):
 
     @property
     def available(self) -> bool:
-        """Return True when entity has a valid SOC (SMART_CHARGE), otherwise False so HA shows unavailable."""
-        return self._attr_native_value is not None
+        """Return True in SMART_CHARGE, also before a SoC was entered, so it can be set."""
+        ev_data = self.coordinator.get_ev_data(self._ev_id)
+        return (
+            ev_data is not None
+            and ev_data.charging_mode == ChargingMode.SMART_CHARGE.value
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:

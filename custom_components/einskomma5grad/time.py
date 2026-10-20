@@ -1,0 +1,32 @@
+"""Time platform for 1KOMMA5GRAD integration."""
+
+import logging
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .const import DOMAIN
+from .coordinator import Coordinator
+from .ev_departure_time import EVDepartureTime
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+):
+    """Set up the time entities."""
+    coordinator: Coordinator = hass.data[DOMAIN][config_entry.entry_id].coordinator
+
+    entities = []
+
+    for ev_id, ev in (coordinator.data.ev_data or {}).items():
+        if ev.system_id is None:
+            _LOGGER.warning("Skipping EV %s with no system_id", ev_id)
+            continue
+        entities.append(EVDepartureTime(coordinator, ev.system_id, ev_id))
+
+    async_add_entities(entities)
