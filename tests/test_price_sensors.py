@@ -112,11 +112,12 @@ async def test_slot_price_sensors_read_current_slot(
 ):
     await _setup_with_frozen_time(hass, mock_config_entry, mock_api)
 
-    # Slot 09:30Z: marketPriceWithVat 0.0510629 / marketPrice 0.04291
+    # Frozen at 08:30 UTC, the slot ends at 08:45, so key 08:45Z:
+    # marketPriceWithVat 0.0557039 / marketPrice 0.04681
     spot = hass.states.get(f"sensor.spot_price_{SYSTEM_SLUG}")
     assert spot is not None
-    assert float(spot.state) == 0.0511
-    assert spot.attributes["price_without_vat"] == 0.0429
+    assert float(spot.state) == 0.0557
+    assert spot.attributes["price_without_vat"] == 0.0468
 
     # gridCostsWithVat 0.1520344 / gridCosts 0.12776
     grid = hass.states.get(f"sensor.grid_costs_{SYSTEM_SLUG}")
