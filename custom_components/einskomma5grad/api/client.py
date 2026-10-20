@@ -223,7 +223,7 @@ class Client:
                 algorithms=["RS256"],
             )
 
-            now = datetime.datetime.now(datetime.timezone.utc)
+            now = datetime.datetime.now(datetime.UTC)
             return token["exp"] - before < now.timestamp()
         except (jwt.PyJWTError, KeyError, TypeError):
             return True

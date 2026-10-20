@@ -253,7 +253,7 @@ class Coordinator(DataUpdateCoordinator[SystemsData]):
 
             # Local midnight, so the day totals in the price response cover the
             # local calendar day like the other daily figures.
-            start = dt_util.start_of_local_day().astimezone(datetime.timezone.utc)
+            start = dt_util.start_of_local_day().astimezone(datetime.UTC)
             end = start + timedelta(days=2)
 
             # Local calendar day, so daily energy totals align with the dashboard.
