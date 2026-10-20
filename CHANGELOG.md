@@ -1,3 +1,9 @@
+## [1.8.0-dev.2](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.8.0-dev.1...v1.8.0-dev.2) (2026-10-20)
+
+### 🛠️ Fixes
+
+* read the electricity price of the current 15 minute slot ([b1a29bb](https://github.com/BirknerAlex/ha-1komma5grad/commit/b1a29bb29debc410dfa6b6820a11bf2aaec2c70e))
+
 ## [1.8.0-dev.1](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.7.1...v1.8.0-dev.1) (2026-10-20)
 
 ### 🛠️ Fixes
