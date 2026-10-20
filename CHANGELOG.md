@@ -1,3 +1,13 @@
+## [1.8.0-dev.1](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.7.1...v1.8.0-dev.1) (2026-10-20)
+
+### 🛠️ Fixes
+
+* report market price in EUR/kWh and merge adjacent slots ([2b9178d](https://github.com/BirknerAlex/ha-1komma5grad/commit/2b9178d49607c7cee6331d8da65b0824971b82fb))
+
+### 🚀 Features
+
+* expose Heartbeat AI battery decisions as binary sensor ([d9a637d](https://github.com/BirknerAlex/ha-1komma5grad/commit/d9a637d56769027f980a477f00ddb2b6098488ec))
+
 ## [1.7.1](https://github.com/BirknerAlex/ha-1komma5grad/compare/v1.7.0...v1.7.1) (2026-10-20)
 
 ### 🛠️ Fixes
